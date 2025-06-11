@@ -13,7 +13,7 @@
 # Skrip instalasi akan menginstal ini secara otomatis.
 # ==============================================================================
 # python-telegram-bot==21.2 # Versi terbaru yang stabil per Juni 2024
-# SQLAlchemy==2.0.30 # Atau versi terbaru yang kompatibel jika Anda ingin ORM
+# SQLAlchemy==2.0.30 # Jika Anda ingin menggunakan ORM yang lebih canggih (saat ini belum digunakan, SQLite bawaan)
 
 
 # ==============================================================================
@@ -34,7 +34,8 @@ from telegram import (
     InlineKeyboardMarkup,
     ChatMember,
     Chat,
-    constants
+    constants,
+    ChatPermissions # PENTING: Tambahkan import ini untuk mengunci grup
 )
 from telegram.ext import (
     Application,
@@ -328,21 +329,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_html(message, reply_markup=reply_markup)
     log_admin_action_db(user.id, "Used /start command")
 
-async def user_start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengirim pesan sambutan untuk pengguna biasa."""
-    user = update.effective_user
-    logger.info(f"Pengguna {user.id} ({user.full_name}) menggunakan /start.")
-
-    message = (
-        f"Halo, {user.full_name}! Saya GuardianBot.\n"
-        "Saya adalah bot pelindung untuk grup ini, menjaga dari spam dan konten tidak diinginkan.\n"
-        "Jika Anda memiliki pertanyaan, silakan hubungi admin grup."
-    )
-    # Tombol untuk pengguna biasa bisa lebih sederhana, misalnya hanya ke help
-    keyboard = [[InlineKeyboardButton("❓ Bantuan", callback_data='help_menu')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_html(message, reply_markup=reply_markup)
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menampilkan menu bantuan utama."""
@@ -634,32 +620,36 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 "*Perintah Umum:*\n\n"
                 "• `/start`: Menampilkan pesan sambutan dan menu utama (untuk admin).\n"
                 "• `/help`: Menampilkan menu bantuan ini.\n"
-                "• `/status_bot`: Melihat status umum bot dan fitur yang aktif.\n"
+                "• `/cek_pengaturan`: Melihat status umum bot dan fitur yang aktif.\n"
             )
         elif category == 'admin':
             response_text = (
                 "*Perintah Admin:*\n\n"
                 "• `/tambah_pengguna <user_id> <nama_pengguna> <hari>`: Menambah pengguna bot dengan masa aktif.\n"
                 "• `/hapus_pengguna <user_id>`: Menghapus pengguna bot.\n"
-                "• `/daftar_pengguna`: Menampilkan daftar semua pengguna bot.\n"
+                "• `/daftar_pengguna`: Menampilkan daftar semua pengguna bot (via tombol).\n"
                 "• `/detail_pengguna <user_id>`: Menampilkan rincian pengguna.\n"
                 "• `/backup`: Membuat file backup pengaturan bot.\n"
                 "• `/restore`: Memuat pengaturan dari file backup (balas file backup dengan perintah ini).\n"
                 "• `/siarkan_pesan <pesan>`: Mengirim pesan ke semua grup yang bot ini ada di dalamnya.\n"
-                "• `/opsi_perlindungan`: Menampilkan menu untuk pengaturan perlindungan lanjutan.\n"
                 "• `/lock_group`: Mengunci grup (hanya admin yang bisa kirim pesan).\n"
                 "• `/unlock_group`: Membuka kunci grup.\n"
                 "• `/welcome_config`: Mengatur pesan sambutan anggota baru.\n"
+                "• `/set_welcome_message <pesan_baru>`: Mengubah pesan selamat datang.\n"
+                "• `/toggle_welcome_message`: Mengaktifkan/menonaktifkan pesan selamat datang.\n"
                 "• `/add_link_whitelist <link>`: Menambah tautan ke daftar putih.\n"
                 "• `/del_link_whitelist <link>`: Menghapus tautan dari daftar putih.\n"
                 "• `/add_keyword <kata_kunci>`: Menambah kata kunci terlarang.\n"
                 "• `/del_keyword <kata_kunci>`: Menghapus kata kunci terlarang.\n"
                 "• `/warn <user_id> [alasan]`: Memberikan peringatan kepada pengguna.\n"
                 "• `/warnings_config`: Mengatur ambang batas peringatan dan melihat log peringatan.\n"
+                "• `/set_warning_limit <jumlah>`: Mengubah ambang batas peringatan.\n"
+                "• `/view_user_warnings <user_id>`: Melihat riwayat peringatan pengguna.\n"
                 "• `/stats`: Menampilkan statistik grup.\n"
-                "• `/view_chat_log`: Melihat sebagian log chat terbaru.\n"
-                "• `/view_contact_log`: Melihat daftar kontak grup.\n"
-                "• `/view_admin_log`: Melihat log aktivitas admin.\n"
+                "• `/set_flood_limit <jml_msg> <detik>`: Atur batas pesan cepat.\n"
+                "• `/view_chat_log`: Melihat sebagian log chat terbaru (via tombol).\n"
+                "• `/view_contact_log`: Melihat daftar kontak grup (via tombol).\n"
+                "• `/view_admin_log`: Melihat log aktivitas admin (via tombol).\n"
             )
         elif category == 'protection':
             response_text = (
@@ -883,7 +873,9 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 @admin_only
 async def check_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menampilkan semua pengaturan bot (sama seperti check_status_settings callback)."""
-    await button_callback_handler(update, context) # Panggil callback handler untuk check_status_settings
+    # Panggil callback handler untuk check_status_settings, yang akan menampilkan menu
+    await button_callback_handler(update, context)
+
 
 @admin_only
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -996,10 +988,10 @@ async def lock_group_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 can_send_polls=False,
                 can_send_other_messages=False,
                 can_add_web_page_previews=False,
-                can_change_info=False,
-                can_invite_users=False,
-                can_pin_messages=False,
-                can_manage_topics=False
+                can_change_info=False, # Admin harus tetap bisa mengubah info
+                can_invite_users=False, # Admin harus tetap bisa mengundang
+                can_pin_messages=False, # Admin harus tetap bisa menyematkan
+                can_manage_topics=False # Admin harus tetap bisa mengatur topik
             )
         )
         set_setting_db(f'lock_group_{chat_id}', 'on')
@@ -1027,10 +1019,10 @@ async def unlock_group_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 can_send_polls=True,
                 can_send_other_messages=True,
                 can_add_web_page_previews=True,
-                can_change_info=False,
-                can_invite_users=True,
-                can_pin_messages=False,
-                can_manage_topics=False
+                can_change_info=False, # Admin harus tetap bisa mengubah info
+                can_invite_users=True, # Admin harus tetap bisa mengundang
+                can_pin_messages=False, # Admin harus tetap bisa menyematkan
+                can_manage_topics=False # Admin harus tetap bisa mengatur topik
             )
         )
         set_setting_db(f'lock_group_{chat_id}', 'off')
@@ -1236,103 +1228,108 @@ user_last_message_time = {}
 async def message_protection_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menangani pesan untuk berbagai fitur perlindungan dan logging."""
     message = update.effective_message
-    if not message or not message.text:
-        return # Abaikan pesan tanpa teks (misalnya, hanya stiker, foto tanpa caption)
+    if not message: # Pastikan ada pesan
+        return
 
     user = update.effective_user
     chat = update.effective_chat
 
     # Jika pesan bukan dari grup atau supergrup, abaikan perlindungan
     if chat.type not in [Chat.GROUP, Chat.SUPERGROUP]:
-        if is_admin(user.id): # Jika admin chat pribadi, tetap log chat
+        if user and is_admin(user.id) and message.text: # Jika admin chat pribadi, tetap log chat
             log_chat_db(message.message_id, chat.id, user.id, user.full_name, message.text, message.date)
         return
 
-    # --- Logging Chat ---
-    log_chat_db(message.message_id, chat.id, user.id, user.full_name, message.text, message.date)
-    # Logging kontak di sini juga, untuk memastikan semua anggota grup tercatat
+    # Jika pengirim adalah bot itu sendiri atau admin bot, abaikan sebagian besar perlindungan
+    if user and (user.id == context.bot.id or is_admin(user.id)):
+        # Namun, tetap log chat jika itu pesan admin di grup
+        if message.text: # Hanya log pesan teks dari admin
+            log_chat_db(message.message_id, chat.id, user.id, user.full_name, message.text, message.date)
+        return
+
+    # --- Logging Chat & Kontak untuk non-admin di grup ---
+    if message.text: # Hanya log pesan teks
+        log_chat_db(message.message_id, chat.id, user.id, user.full_name, message.text, message.date)
     log_contact_db(user.id, user.full_name)
 
 
     # --- Mode Baca Saja (Lock Group) ---
     # Periksa apakah grup terkunci dan pengirim bukan admin bot
-    if get_setting_db(f'lock_group_{chat.id}', 'off') == 'on' and not is_admin(user.id):
+    if get_setting_db(f'lock_group_{chat.id}', 'off') == 'on':
         try:
             await message.delete()
             logger.info(f"Pesan dari {user.full_name} dihapus karena grup terkunci.")
-            # Bisa juga kirim notifikasi pribadi ke user, tapi ini bisa jadi spam
+            return # Hentikan pemrosesan lebih lanjut jika pesan dihapus
         except Exception as e:
             logger.error(f"Gagal menghapus pesan di grup terkunci: {e}")
-        return # Hentikan pemrosesan lebih lanjut jika pesan dihapus
-
+            # Lanjutkan, karena tidak berhasil dihapus.
 
     # --- Perlindungan Link ---
-    if get_setting_db('link_protection', 'off') == 'on' and not is_admin(user.id):
-        # Regex untuk mendeteksi URL (http/https) atau domain.
-        url_pattern = r'https?://[^\s/$.?#].[^\s]*'
-        if re.search(url_pattern, message.text, re.IGNORECASE):
-            # Cek Whitelist
-            whitelisted_links = get_whitelist_links_db()
-            is_whitelisted = False
-            for wl_link in whitelisted_links:
-                if wl_link in message.text: # Cek jika link yang dikirim mengandung link whitelist
-                    is_whitelisted = True
-                    break
-            
-            if not is_whitelisted:
-                try:
-                    await message.delete()
-                    await context.bot.send_message(
-                        chat_id=chat.id,
-                        text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung tautan. Mohon tidak mengirim tautan di grup ini.",
-                        parse_mode=constants.ParseMode.HTML
-                    )
-                    logger.info(f"Link dari {user.full_name} dihapus di {chat.title}.")
-                    return # Hentikan pemrosesan lebih lanjut
-                except Exception as e:
-                    logger.error(f"Gagal menghapus link dari {user.full_name}: {e}")
+    if get_setting_db('link_protection', 'off') == 'on':
+        if message.text: # Hanya cek link di pesan teks
+            # Regex untuk mendeteksi URL (http/https) atau domain.
+            url_pattern = r'https?://[^\s/$.?#].[^\s]*'
+            if re.search(url_pattern, message.text, re.IGNORECASE):
+                # Cek Whitelist
+                whitelisted_links = get_whitelist_links_db()
+                is_whitelisted = False
+                for wl_link in whitelisted_links:
+                    if wl_link in message.text: # Cek jika link yang dikirim mengandung link whitelist
+                        is_whitelisted = True
+                        break
+                
+                if not is_whitelisted:
+                    try:
+                        await message.delete()
+                        await context.bot.send_message(
+                            chat_id=chat.id,
+                            text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung tautan. Mohon tidak mengirim tautan di grup ini.",
+                            parse_mode=constants.ParseMode.HTML
+                        )
+                        logger.info(f"Link dari {user.full_name} dihapus di {chat.title}.")
+                        return # Hentikan pemrosesan lebih lanjut
+                    except Exception as e:
+                        logger.error(f"Gagal menghapus link dari {user.full_name}: {e}")
 
     # --- Perlindungan Undangan Grup Telegram ---
-    if get_setting_db('invite_protection', 'off') == 'on' and not is_admin(user.id):
-        # Regex untuk undangan grup Telegram (t.me/joinchat atau telegram.me/joinchat)
-        invite_pattern = r'(t\.me|telegram\.me)\/joinchat\/[a-zA-Z0-9_-]+'
-        if re.search(invite_pattern, message.text, re.IGNORECASE):
-            try:
-                await message.delete()
-                await context.bot.send_message(
-                    chat_id=chat.id,
-                    text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung undangan grup Telegram. Mohon tidak mengirim undangan grup di sini.",
-                    parse_mode=constants.ParseMode.HTML
-                )
-                logger.info(f"Undangan grup dari {user.full_name} dihapus di {chat.title}.")
-                return # Hentikan pemrosesan lebih lanjut
-            except Exception as e:
-                logger.error(f"Gagal menghapus undangan grup dari {user.full_name}: {e}")
-
-    # --- Perlindungan Kata Kunci ---
-    if get_setting_db('keyword_protection', 'off') == 'on' and not is_admin(user.id):
-        forbidden_keywords = get_keywords_db()
-        for keyword in forbidden_keywords:
-            if keyword.lower() in message.text.lower():
+    if get_setting_db('invite_protection', 'off') == 'on':
+        if message.text: # Hanya cek undangan di pesan teks
+            # Regex untuk undangan grup Telegram (t.me/joinchat atau telegram.me/joinchat)
+            invite_pattern = r'(t\.me|telegram\.me)\/joinchat\/[a-zA-Z0-9_-]+'
+            if re.search(invite_pattern, message.text, re.IGNORECASE):
                 try:
                     await message.delete()
                     await context.bot.send_message(
                         chat_id=chat.id,
-                        text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung kata kunci terlarang.",
+                        text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung undangan grup Telegram. Mohon tidak mengirim undangan grup di sini.",
                         parse_mode=constants.ParseMode.HTML
                     )
-                    logger.info(f"Pesan dengan kata kunci terlarang dari {user.full_name} dihapus di {chat.title}.")
+                    logger.info(f"Undangan grup dari {user.full_name} dihapus di {chat.title}.")
                     return # Hentikan pemrosesan lebih lanjut
                 except Exception as e:
-                    logger.error(f"Gagal menghapus pesan dengan kata kunci terlarang dari {user.full_name}: {e}")
+                    logger.error(f"Gagal menghapus undangan grup dari {user.full_name}: {e}")
+
+    # --- Perlindungan Kata Kunci ---
+    if get_setting_db('keyword_protection', 'off') == 'on':
+        if message.text: # Hanya cek kata kunci di pesan teks
+            forbidden_keywords = get_keywords_db()
+            for keyword in forbidden_keywords:
+                if keyword.lower() in message.text.lower():
+                    try:
+                        await message.delete()
+                        await context.bot.send_message(
+                            chat_id=chat.id,
+                            text=f"{get_user_mention(user)}, pesan Anda dihapus karena mengandung kata kunci terlarang.",
+                            parse_mode=constants.ParseMode.HTML
+                        )
+                        logger.info(f"Pesan dengan kata kunci terlarang dari {user.full_name} dihapus di {chat.title}.")
+                        return # Hentikan pemrosesan lebih lanjut
+                    except Exception as e:
+                        logger.error(f"Gagal menghapus pesan dengan kata kunci terlarang dari {user.full_name}: {e}")
 
     # --- Anti-Spam Media (jika hanya ada media tanpa teks) ---
-    # Ini memerlukan MessageHandler terpisah yang memfilter pesan tanpa teks,
-    # atau logika yang lebih kompleks di sini. Untuk saat ini, kita fokus pada pesan teks.
-    # Jika Anda ingin menghapus pesan hanya berisi foto/video tanpa caption, Anda perlu
-    # menambahkan filter `filters.PHOTO | filters.VIDEO` ke handler yang terpisah
-    # atau periksa `if message.photo or message.video` di sini dan `if not message.caption`.
-    if get_setting_db('media_spam_protection', 'off') == 'on' and not is_admin(user.id):
+    if get_setting_db('media_spam_protection', 'off') == 'on':
+        # Cek jika ada foto, video, stiker, atau animasi DAN tidak ada teks (caption)
         if (message.photo or message.video or message.sticker or message.animation) and not message.caption:
             try:
                 await message.delete()
@@ -1347,7 +1344,7 @@ async def message_protection_handler(update: Update, context: ContextTypes.DEFAU
                 logger.error(f"Gagal menghapus media spam dari {user.full_name}: {e}")
 
     # --- Batas Pesan Cepat (Flood Protection) ---
-    if get_setting_db('flood_protection', 'off') == 'on' and not is_admin(user.id):
+    if get_setting_db('flood_protection', 'off') == 'on':
         user_id = user.id
         current_time = datetime.now()
         
@@ -1408,7 +1405,7 @@ async def set_flood_limit_command(update: Update, context: ContextTypes.DEFAULT_
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log Errors caused by Updates."""
     logger.warning(f'Update "{update}" caused error "{context.error}"')
-    if update.effective_chat and is_admin(update.effective_user.id):
+    if update.effective_chat and update.effective_user and is_admin(update.effective_user.id):
         try:
             await update.effective_chat.send_message(
                 f"⚠️ Terjadi kesalahan: `{context.error}`\n"
@@ -1440,8 +1437,7 @@ def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
     # --- Daftarkan Command Handlers ---
-    # Perintah /start akan mengarah ke user_start_command secara default,
-    # tetapi jika admin, akan dipanggil admin_start_command melalui is_admin check.
+    # Perintah /start akan mengarah ke start_command (yang admin-only).
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
 
@@ -1476,10 +1472,13 @@ def main() -> None:
     # Handler untuk anggota baru (termasuk bot itu sendiri ditambahkan ke grup)
     application.add_handler(ChatMemberHandler(new_member_handler, ChatMemberHandler.CHAT_MEMBER))
     
-    # Handler untuk semua pesan teks (untuk logging, perlindungan link/kata kunci/flood/read-only)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_protection_handler))
-    # Handler tambahan untuk pesan hanya media tanpa caption
-    application.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO | filters.STICKER | filters.ANIMATION, message_protection_handler))
+    # Handler untuk semua pesan (teks, media dengan/tanpa caption) untuk perlindungan dan logging
+    # Pastikan ini berjalan setelah handler command, agar command tidak terhapus.
+    # filter ~filters.COMMAND memastikan handler ini tidak memproses perintah bot.
+    application.add_handler(MessageHandler(
+        filters.TEXT | filters.PHOTO | filters.VIDEO | filters.STICKER | filters.ANIMATION | filters.Document.ALL & ~filters.COMMAND,
+        message_protection_handler
+    ))
 
 
     # Daftarkan Error Handler
