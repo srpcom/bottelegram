@@ -7,7 +7,7 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 )
 
-# Load configuration
+# Load config from config.json
 with open("config.json") as f:
     config = json.load(f)
 
@@ -31,7 +31,7 @@ conn.commit()
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Command handlers
+# Command: /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     cursor.execute(
@@ -39,23 +39,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (user.id, user.username, user.first_name, user.last_name)
     )
     conn.commit()
-await update.message.reply_text(
-    "Perintah:\n"
-    "/start - Memulai bot\n"
-    "/help - Menampilkan bantuan\n"
-    "/user <id> - Info pengguna (admin saja)\n"
-    "/broadcast <pesan> - Kirim pesan ke semua user (admin saja)"
-)
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Perintah:
-/start - Mulai bot
-/broadcast - Khusus admin")
+    await update.message.reply_text("Selamat datang! Ketik 'halo' untuk mencoba.")
 
+# Command: /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Perintah:
+"
+        "/start - Memulai bot
+"
+        "/help - Menampilkan bantuan
+"
+        "/user <id> - Info pengguna (admin saja)
+"
+        "/broadcast <pesan> - Kirim pesan ke semua user (admin saja)"
+    )
+
+# Auto-reply for text
 async def reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     if "halo" in text:
         await update.message.reply_text("Halo juga!")
 
+# Command: /broadcast
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
@@ -70,11 +76,12 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(chat_id=uid, text=message)
             except Exception as e:
-                logger.warning(f"Could not send message to {uid}: {e}")
+                logger.warning(f"Gagal kirim ke {uid}: {e}")
         await update.message.reply_text("✅ Pesan telah dikirim.")
     else:
         await update.message.reply_text("⚠️ Format salah. Gunakan: /broadcast <pesan>")
 
+# Command: /user <id>
 async def userinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
@@ -97,7 +104,7 @@ Nama: {data[2]} {data[3]}")
     else:
         await update.message.reply_text("Gunakan format: /user <id>")
 
-# Main function
+# Main entry point
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
