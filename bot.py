@@ -39,8 +39,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (user.id, user.username, user.first_name, user.last_name)
     )
     conn.commit()
-    await update.message.reply_text("Selamat datang! Ketik 'halo' untuk mencoba.")
-
+await update.message.reply_text(
+    "Perintah:\n"
+    "/start - Memulai bot\n"
+    "/help - Menampilkan bantuan\n"
+    "/user <id> - Info pengguna (admin saja)\n"
+    "/broadcast <pesan> - Kirim pesan ke semua user (admin saja)"
+)
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 await update.message.reply_text("Perintah:
 /start - Mulai bot
