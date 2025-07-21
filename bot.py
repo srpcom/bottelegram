@@ -1,141 +1,108 @@
+
+import logging
 import json
 import sqlite3
-import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (ApplicationBuilder, CommandHandler, ContextTypes,
-                          MessageHandler, CallbackQueryHandler, filters)
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+)
 
-# Load konfigurasi
+# Load configuration
 with open("config.json") as f:
     config = json.load(f)
 
-TOKEN = config["token"]
-ADMIN_IDS = config.get("admin_ids", [])
-DB_PATH = "data/bot.db"
+BOT_TOKEN = config["BOT_TOKEN"]
+ADMIN_IDS = config["ADMIN_IDS"]
 
-def connect_db():
-    return sqlite3.connect(DB_PATH)
+# Database setup
+conn = sqlite3.connect("bot.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY,
+        username TEXT,
+        first_name TEXT,
+        last_name TEXT
+    )
+""")
+conn.commit()
 
-# === Command Handlers ===
+# Logging
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db = connect_db()
-    cur = db.cursor()
-    cur.execute("SELECT id FROM users WHERE id = ?", (user.id,))
-    if not cur.fetchone():
-        cur.execute("INSERT INTO users (id, username, first_name, registered_at) VALUES (?, ?, ?, ?)",
-                    (user.id, user.username, user.first_name, datetime.datetime.now().isoformat()))
-        db.commit()
-        await update.message.reply_text("✅ Anda berhasil terdaftar!")
-    else:
-        await update.message.reply_text("📌 Anda sudah terdaftar.")
-    db.close()
+    cursor.execute(
+        "INSERT OR IGNORE INTO users (id, username, first_name, last_name) VALUES (?, ?, ?, ?)",
+        (user.id, user.username, user.first_name, user.last_name)
+    )
+    conn.commit()
+    await update.message.reply_text("Selamat datang! Ketik 'halo' untuk mencoba.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Perintah:
-/start
-/saldo
-/transaksi
-/user [id] (admin)
-/broadcast [pesan] (admin)")
+/start - Mulai bot
+/broadcast - Khusus admin")
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("💰 Cek Saldo", callback_data="saldo")],
-        [InlineKeyboardButton("📈 Histori Transaksi", callback_data="transaksi")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🔘 Pilih menu:", reply_markup=reply_markup)
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    if query.data == "saldo":
-        await send_saldo(query, user_id)
-    elif query.data == "transaksi":
-        await send_transaksi(query, user_id)
-
-async def send_saldo(dest, user_id):
-    db = connect_db()
-    cur = db.cursor()
-    cur.execute("SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount ELSE -amount END), 0) FROM transactions WHERE user_id=?", (user_id,))
-    saldo = cur.fetchone()[0]
-    db.close()
-    await dest.edit_message_text(f"💰 Saldo Anda: Rp {saldo:,.0f}")
-
-async def send_transaksi(dest, user_id):
-    db = connect_db()
-    cur = db.cursor()
-    cur.execute("SELECT type, amount, timestamp, description FROM transactions WHERE user_id=? ORDER BY timestamp DESC LIMIT 5", (user_id,))
-    rows = cur.fetchall()
-    db.close()
-    if not rows:
-        await dest.edit_message_text("📭 Belum ada transaksi.")
-    else:
-        lines = [f"[{t}] {desc or '-'}: {'+' if typ=='income' else '-'}Rp {amt:,.0f}" for typ, amt, t, desc in rows]
-        await dest.edit_message_text("\n".join(lines))
-
-# === Admin Only Commands ===
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
-
-async def user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        return await update.message.reply_text("🚫 Perintah ini hanya untuk admin.")
-    if context.args:
-        target_id = int(context.args[0])
-        db = connect_db()
-        cur = db.cursor()
-        cur.execute("SELECT * FROM users WHERE id=?", (target_id,))
-        row = cur.fetchone()
-        db.close()
-        if row:
-            await update.message.reply_text(f"👤 ID: {row[0]}\nUsername: {row[1]}\nNama: {row[2]}\nDaftar: {row[3]}")
-        else:
-            await update.message.reply_text("❌ User tidak ditemukan.")
-
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sender_id = update.effective_user.id
-    if not is_admin(sender_id):
-        return await update.message.reply_text("🚫 Perintah ini hanya untuk admin.")
-    msg = " ".join(context.args)
-    if not msg:
-        return await update.message.reply_text("⚠️ Masukkan pesan setelah perintah.")
-    db = connect_db()
-    cur = db.cursor()
-    cur.execute("SELECT id FROM users")
-    ids = [row[0] for row in cur.fetchall()]
-    db.close()
-    count = 0
-    for uid in ids:
-        try:
-            await context.bot.send_message(chat_id=uid, text=f"📢 {msg}")
-            count += 1
-        except:
-            pass
-    await update.message.reply_text(f"✅ Pesan dikirim ke {count} user.")
-
-# === Auto Reply ===
-async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def reply_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     if "halo" in text:
-        await update.message.reply_text("Halo juga 👋")
-    elif "gas" in text:
-        await update.message.reply_text("🔥 GASSKAN 🔥")
-    elif "anjay" in text:
-        await update.message.reply_text("🛑 ANJAY DILARANG 🛑")
+        await update.message.reply_text("Halo juga!")
 
-# === Main App ===
-app = ApplicationBuilder().token(TOKEN).build()
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Anda tidak diizinkan menggunakan perintah ini.")
+        return
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command))
-app.add_handler(CommandHandler("menu", menu))
-app.add_handler(CommandHandler("user", user_cmd))
-app.add_handler(CommandHandler("broadcast", broadcast))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, auto_reply))
+    if context.args:
+        message = " ".join(context.args)
+        cursor.execute("SELECT id FROM users")
+        recipients = cursor.fetchall()
+        for (uid,) in recipients:
+            try:
+                await context.bot.send_message(chat_id=uid, text=message)
+            except Exception as e:
+                logger.warning(f"Could not send message to {uid}: {e}")
+        await update.message.reply_text("✅ Pesan telah dikirim.")
+    else:
+        await update.message.reply_text("⚠️ Format salah. Gunakan: /broadcast <pesan>")
 
-app.run_polling()
+async def userinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("❌ Anda tidak diizinkan menggunakan perintah ini.")
+        return
+
+    if context.args:
+        try:
+            uid = int(context.args[0])
+            cursor.execute("SELECT * FROM users WHERE id = ?", (uid,))
+            data = cursor.fetchone()
+            if data:
+                await update.message.reply_text(f"ID: {data[0]}
+Username: {data[1]}
+Nama: {data[2]} {data[3]}")
+            else:
+                await update.message.reply_text("User tidak ditemukan.")
+        except ValueError:
+            await update.message.reply_text("ID harus berupa angka.")
+    else:
+        await update.message.reply_text("Gunakan format: /user <id>")
+
+# Main function
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("user", userinfo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_message))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
