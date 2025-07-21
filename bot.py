@@ -42,7 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Selamat datang! Ketik 'halo' untuk mencoba.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Perintah:
+await update.message.reply_text("Perintah:
 /start - Mulai bot
 /broadcast - Khusus admin")
 
