@@ -13,8 +13,11 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     if "halo" in text:
         await update.message.reply_text("Halo juga!")
+    elif "selamat pagi" in text:
+        await update.message.reply_text("Selamat pagi juga 😊")
     else:
         await update.message.reply_text(f"Kamu bilang: {text}")
+
 
 app = ApplicationBuilder().token(config["token"]).build()
 app.add_handler(CommandHandler("start", start))
