@@ -8,10 +8,13 @@ sudo apt update && sudo apt install -y python3 python3-pip git
 # Tanya interaktif
 read -p "Masukkan token API Telegram bot Anda: " token
 
-# Clone repo bot
-git clone https://github.com/<USERNAME>/<REPO-NAME>.git /opt/telegram-bot
+# Buat folder target
+mkdir -p /opt/telegram-bot
 
-# Simpan config
+# Clone repo
+git clone https://github.com/srpcom/bottelegram.git /opt/telegram-bot
+
+# Simpan token ke config
 cat <<EOF > /opt/telegram-bot/config.json
 {
   "token": "$token"
@@ -38,10 +41,10 @@ User=root
 WantedBy=multi-user.target
 EOF
 
-# Aktifkan dan mulai layanan
+# Aktifkan dan mulai service
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable telegrambot
-sudo systemctl start telegrambot
+sudo systemctl restart telegrambot
 
 echo "✅ Bot Telegram berhasil diinstal dan berjalan sebagai service systemd!"
