@@ -47,7 +47,7 @@ await update.message.reply_text(
     "/broadcast <pesan> - Kirim pesan ke semua user (admin saja)"
 )
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-await update.message.reply_text("Perintah:
+    await update.message.reply_text("Perintah:
 /start - Mulai bot
 /broadcast - Khusus admin")
 
