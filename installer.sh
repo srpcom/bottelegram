@@ -17,9 +17,9 @@ BOT_DIR="/opt/srpcom_bot"
 VENV_DIR="$BOT_DIR/venv"
 SERVICE_NAME="srpcom-bot"
 ADMIN_ID="5666536947" # ID Admin Utama
-TRIPAY_API_KEY="B0RS3FtI9tMrfh1wI7eZjsruBoUlybY18tEXSEo2"
-TRIPAY_PRIVATE_KEY="GqoGJ-86JmH-knzMg-Zmu6n-XZaYR"
-TRIPAY_MERCHANT_CODE="T40281"
+TRIPAY_API_KEY="B0RS3FtI9tMrfh1wI7eZjsruBoUlybY18tEXSEo2x"
+TRIPAY_PRIVATE_KEY="GqoGJ-86JmH-knzMg-Zmu6n-XZaYR9"
+TRIPAY_MERCHANT_CODE="T40281y"
 CALLBACK_PORT="8443" # Port untuk menerima callback dari Tripay
 
 # --- Fungsi untuk menampilkan pesan ---
